@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="airline_data.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="2615"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="7" parent="0"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="master_kpi" custom_title="0" dock_id="1" table="4,10:mainmaster_kpi"/><dock_state state="000000ff00000000fd000000010000000200000289000003b7fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000002890000013f00ffffff000002890000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="airport_risk_monthly" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="39"/><column index="2" value="45"/><column index="3" value="47"/><column index="4" value="300"/><column index="5" value="109"/><column index="6" value="95"/><column index="7" value="104"/><column index="8" value="113"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="flight_counts_monthly" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="39"/><column index="2" value="45"/><column index="3" value="46"/><column index="4" value="199"/><column index="5" value="47"/><column index="6" value="300"/><column index="7" value="121"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="flights" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="7" mode="1"/></sort><column_widths><column index="1" value="39"/><column index="2" value="45"/><column index="3" value="46"/><column index="4" value="300"/><column index="5" value="47"/><column index="6" value="300"/><column index="7" value="67"/><column index="8" value="63"/><column index="9" value="64"/><column index="10" value="73"/><column index="11" value="55"/><column index="12" value="72"/><column index="13" value="97"/><column index="14" value="85"/><column index="15" value="80"/><column index="16" value="71"/><column index="17" value="84"/><column index="18" value="93"/><column index="19" value="66"/><column index="20" value="92"/><column index="21" value="117"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="master_kpi" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="39"/><column index="2" value="45"/><column index="3" value="46"/><column index="4" value="199"/><column index="5" value="47"/><column index="6" value="300"/><column index="7" value="77"/><column index="8" value="80"/><column index="9" value="120"/><column index="10" value="123"/><column index="11" value="132"/><column index="12" value="105"/><column index="13" value="131"/><column index="14" value="156"/><column index="15" value="137"/><column index="16" value="146"/><column index="17" value="119"/><column index="18" value="145"/><column index="19" value="170"/><column index="20" value="107"/><column index="21" value="113"/><column index="22" value="79"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">-- Key performance indicator #1: flight counts
+-- How many arrival flights are happening over time + how does that vary by airport and airline? (Capacity planning, staff decisions, pre vs post COVID trends)
+CREATE TABLE flight_counts_monthly AS
+SELECT
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name,
+    SUM(arr_flights) AS total_arrival_flights
+FROM flights
+GROUP BY
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name;
+-- Check if it worked
+SELECT
+    year,
+    SUM(total_arrival_flights) AS flights
+FROM flight_counts_monthly
+GROUP BY year
+ORDER BY year;
+
+-- Key performance indicator #2: on-time performance (% on time)
+-- How reliable are airlines and airports at getting flights in on time (flight is on time if it is not more than 15 minutes late)
+CREATE TABLE on_time_performance_monthly AS
+SELECT
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name,
+    SUM(arr_flights) AS total_flights,
+    SUM(arr_del15) AS delayed_15_plus,
+    SUM(arr_flights - arr_del15) AS on_time_flights,
+    ROUND(
+        1.0 * SUM(arr_flights - arr_del15) / SUM(arr_flights),
+        4
+    ) AS on_time_pct
+FROM flights
+GROUP BY
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name;
+-- Check if it worked
+SELECT
+    year,
+    ROUND(
+        1.0 * SUM(on_time_flights) / SUM(total_flights),
+        4
+    ) AS on_time_pct
+FROM on_time_performance_monthly
+GROUP BY year
+ORDER BY year;
+-- Add COVID era labels
+ALTER TABLE on_time_performance_monthly
+ADD COLUMN covid_era TEXT;
+UPDATE on_time_performance_monthly
+SET covid_era =
+    CASE
+        WHEN year &lt;= 2019 THEN 'Pre-COVID'
+        WHEN year BETWEEN 2020 AND 2021 THEN 'COVID'
+        ELSE 'Post-COVID'
+    END;
+-- Manually check database structure if it is there
+
+-- Key performance indicator #3: average delay in minutes
+-- When the flights are delayed, how severe are they in minutes? And which airlines/airports are contributing the most to this?
+CREATE TABLE avg_delay_monthly AS
+SELECT
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name,
+    SUM(arr_flights) AS total_flights,
+    SUM(arr_delay) AS total_delay_minutes,
+    ROUND(
+        1.0 * SUM(arr_delay) / SUM(arr_flights),
+        2
+    ) AS avg_delay_minutes
+FROM flights
+GROUP BY
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name;
+-- Check if it worked
+SELECT
+    year,
+    ROUND(
+        1.0 * SUM(total_delay_minutes) / SUM(total_flights),
+        2
+    ) AS avg_delay_minutes
+FROM avg_delay_monthly
+GROUP BY year
+ORDER BY year;
+-- Top 10 airports with the worst average delays
+SELECT
+    airport_name,
+    ROUND(
+        1.0 * SUM(total_delay_minutes) / SUM(total_flights),
+        2
+    ) AS avg_delay_minutes
+FROM avg_delay_monthly
+GROUP BY airport_name
+HAVING SUM(total_flights) &gt; 5000
+ORDER BY avg_delay_minutes DESC
+LIMIT 10;
+-- Add COVID era labels
+ALTER TABLE avg_delay_monthly
+ADD COLUMN covid_era TEXT;
+
+UPDATE avg_delay_monthly
+SET covid_era =
+    CASE
+        WHEN year &lt;= 2019 THEN 'Pre-COVID'
+        WHEN year BETWEEN 2020 AND 2021 THEN 'COVID'
+        ELSE 'Post-COVID'
+    END;
+	
+-- Key performance indicator #4: delay causes (very important)
+-- Answers how often this reason causes delays and how bad are the delays when they do happen (frequency and severity)?
+CREATE TABLE delay_causes_monthly AS
+SELECT
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name,
+    -- Delay counts (frequency)
+    SUM(carrier_ct) AS carrier_delay_count,
+    SUM(weather_ct) AS weather_delay_count,
+    SUM(nas_ct) AS nas_delay_count,
+    SUM(security_ct) AS security_delay_count,
+    SUM(late_aircraft_ct) AS late_aircraft_delay_count,
+    -- Delay minutes (severity)
+    SUM(carrier_delay) AS carrier_delay_minutes,
+    SUM(weather_delay) AS weather_delay_minutes,
+    SUM(nas_delay) AS nas_delay_minutes,
+    SUM(security_delay) AS security_delay_minutes,
+    SUM(late_aircraft_delay) AS late_aircraft_delay_minutes
+FROM flights
+GROUP BY
+    year,
+    month,
+    carrier,
+    carrier_name,
+    airport,
+    airport_name;
+-- Check to see if it worked (which delay reason is most common); late aircraft
+SELECT
+    SUM(carrier_delay_count) AS carrier,
+    SUM(weather_delay_count) AS weather,
+    SUM(nas_delay_count) AS nas,
+    SUM(security_delay_count) AS security,
+    SUM(late_aircraft_delay_count) AS late_aircraft
+FROM delay_causes_monthly;
+-- Which reasons create the most delay minutes; late aircraft
+SELECT
+    SUM(carrier_delay_minutes) AS carrier,
+    SUM(weather_delay_minutes) AS weather,
+    SUM(nas_delay_minutes) AS nas,
+    SUM(security_delay_minutes) AS security,
+    SUM(late_aircraft_delay_minutes) AS late_aircraft
+FROM delay_causes_monthly;
+-- Try normalizing per flight so comparison is fair for busier vs smaller airports
+CREATE TABLE delay_causes_per_flight_normalized AS
+SELECT
+    d.year,
+    d.month,
+    d.carrier,
+    d.carrier_name,
+    d.airport,
+    d.airport_name,
+    f.total_flights,
+
+    ROUND(d.carrier_delay_minutes * 1.0 / f.total_flights, 2) AS carrier_delay_per_flight,
+    ROUND(d.weather_delay_minutes * 1.0 / f.total_flights, 2) AS weather_delay_per_flight,
+    ROUND(d.nas_delay_minutes * 1.0 / f.total_flights, 2) AS nas_delay_per_flight,
+    ROUND(d.security_delay_minutes * 1.0 / f.total_flights, 2) AS security_delay_per_flight,
+    ROUND(d.late_aircraft_delay_minutes * 1.0 / f.total_flights, 2) AS late_aircraft_delay_per_flight
+FROM delay_causes_monthly d
+JOIN avg_delay_monthly f
+  ON d.year = f.year
+ AND d.month = f.month
+ AND d.carrier = f.carrier
+ AND d.airport = f.airport;
+-- Add COVID era label to delay_causes_monthly (not normalized)
+ALTER TABLE delay_causes_monthly
+ADD COLUMN covid_era TEXT;
+UPDATE delay_causes_monthly
+SET covid_era =
+    CASE
+        WHEN year &lt;= 2019 THEN 'Pre-COVID'
+        WHEN year BETWEEN 2020 AND 2021 THEN 'COVID'
+        ELSE 'Post-COVID'
+    END;
+	
+-- Key performance indicator #5: cancellation rates
+-- How often are flights cancelled and which airline/airport has the highest cancellation risk?
+-- These can be more disruptive than delays and shows system stress whether due to staffing, congestion, weather, etc.
+CREATE TABLE airport_risk_monthly AS
+SELECT
+    o.year,
+    o.month,
+    o.airport,
+    o.airport_name,   
+    -- Aggregated metrics
+    ROUND(1.0 - AVG(o.on_time_pct), 4) AS risk_low_on_time,
+    ROUND(AVG(a.avg_delay_minutes) / (SELECT MAX(avg_delay_minutes) FROM avg_delay_monthly), 4) AS risk_avg_delay,
+    ROUND(AVG(c.cancellation_rate), 4) AS risk_cancellation,
+    -- Combined Risk Score (weighted) - how final risk scores will be determined!
+    ROUND(
+        0.4 * (1.0 - AVG(o.on_time_pct)) + 
+        0.4 * (AVG(a.avg_delay_minutes) / (SELECT MAX(avg_delay_minutes) FROM avg_delay_monthly)) + 
+        0.2 * AVG(c.cancellation_rate),
+        4
+    ) AS overall_risk_score
+FROM on_time_performance_monthly o
+JOIN avg_delay_monthly a
+  ON o.year = a.year AND o.month = a.month AND o.airport = a.airport AND o.carrier = a.carrier
+JOIN cancellation_rate_monthly c
+  ON o.year = c.year AND o.month = c.month AND o.airport = c.airport AND o.carrier = c.carrier
+GROUP BY
+    o.year,
+    o.month,
+    o.airport,
+    o.airport_name;
+-- Manually check to see if it worked - yes
+-- Add COVID era labels
+ALTER TABLE airport_risk_monthly
+ADD COLUMN covid_era TEXT;
+UPDATE airport_risk_monthly
+SET covid_era =
+    CASE
+        WHEN year &lt;= 2019 THEN 'Pre-COVID'
+        WHEN year BETWEEN 2020 AND 2021 THEN 'COVID'
+        ELSE 'Post-COVID'
+    END;
+	
+-- Creating the master_kpi table so that transferring to dashboard will be easier
+-- Create the master KPI table combining KPIs #1-6
+CREATE TABLE master_kpi AS
+SELECT
+    f.year,
+    f.month,
+    f.carrier,
+    f.carrier_name,
+    f.airport,
+    f.airport_name,
+
+    -- KPI #1: Flight Counts
+    f.total_arrival_flights AS total_flights,
+
+    -- KPI #2: On-Time Performance
+    o.on_time_pct,
+
+    -- KPI #3: Average Delay
+    a.avg_delay_minutes,
+
+    -- KPI #4: Delay Causes (both counts and minutes)
+    d.carrier_delay_count,
+    d.weather_delay_count,
+    d.nas_delay_count,
+    d.security_delay_count,
+    d.late_aircraft_delay_count,
+    d.carrier_delay_minutes,
+    d.weather_delay_minutes,
+    d.nas_delay_minutes,
+    d.security_delay_minutes,
+    d.late_aircraft_delay_minutes,
+
+    -- KPI #5: Cancellation Rate
+    c.cancellation_rate,
+
+    -- KPI #6: Combined Risk Score
+    r.overall_risk_score,
+	
+    -- COVID era (use the one from airport_risk_monthly for consistency)
+    r.covid_era
+
+FROM flight_counts_monthly f
+JOIN on_time_performance_monthly o
+    ON f.year = o.year
+   AND f.month = o.month
+   AND f.carrier = o.carrier
+   AND f.airport = o.airport
+JOIN avg_delay_monthly a
+    ON f.year = a.year
+   AND f.month = a.month
+   AND f.carrier = a.carrier
+   AND f.airport = a.airport
+JOIN delay_causes_monthly d
+    ON f.year = d.year
+   AND f.month = d.month
+   AND f.carrier = d.carrier
+   AND f.airport = d.airport
+JOIN cancellation_rate_monthly c
+    ON f.year = c.year
+   AND f.month = c.month
+   AND f.carrier = c.carrier
+   AND f.airport = c.airport
+JOIN airport_risk_monthly r
+    ON f.year = r.year
+   AND f.month = r.month
+   AND f.airport = r.airport;
+
+
+
+
+
+
+</sql><current_tab id="0"/></tab_sql></sqlb_project>

@@ -1,0 +1,16 @@
+feature,importance
+late_aircraft_delay_minutes,0.2520967311405319
+late_aircraft_delay_count,0.13949461199887836
+nas_delay_minutes,0.10649931940003848
+carrier_delay_minutes,0.10096402397224633
+total_flights,0.09164729277998643
+carrier,0.0786879270494512
+nas_delay_count,0.06136616416508711
+weather_delay_minutes,0.058299353282963345
+carrier_delay_count,0.0439809287176262
+month,0.02766615807885972
+weather_delay_count,0.021064293221161896
+airport,0.010661559104268137
+security_delay_minutes,0.004327858185048036
+security_delay_count,0.0032437789038530012
+covid_era,0.0
